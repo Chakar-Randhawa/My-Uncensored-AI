@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Minimal enterprise palette — a restrained neutral scale with a single
+ * accent (indigo), used the same way Vercel's or Linear's dashboards do:
+ * accent reserved for the primary action and small state indicators only,
+ * never as decoration.
+ */
+:root,
+[data-theme="light"] {
+  --background: 0 0% 100%;
+  --foreground: 240 6% 10%;
+  --surface: 240 5% 98%;
+  --border: 240 6% 90%;
+  --muted: 240 5% 96%;
+  --muted-foreground: 240 4% 46%;
+  --accent: 243 75% 59%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 72% 51%;
+}
+
+[data-theme="dark"] {
+  --background: 240 8% 8%;
+  --foreground: 240 5% 92%;
+  --surface: 240 7% 12%;
+  --border: 240 6% 20%;
+  --muted: 240 6% 16%;
+  --muted-foreground: 240 5% 60%;
+  --accent: 243 82% 68%;
+  --accent-foreground: 240 8% 8%;
+  --destructive: 0 70% 60%;
+}
+
+body {
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
