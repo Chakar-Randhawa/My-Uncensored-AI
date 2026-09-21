@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    name: Backend — pytest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run test suite
+        env:
+          # Dummy values — the test suite never makes a real network call
+          # (see tests/conftest.py's FakeAdapter), but Settings validation
+          # requires these to be present to construct the app.
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: test
+          SUPABASE_JWT_SECRET: test
+          OPENROUTER_API_KEY: test
+          GROQ_API_KEY: test
+        run: pytest -v
+
+  backend-import-check:
+    name: Backend — app import + /health smoke test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Import app and hit /health
+        env:
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: test
+          SUPABASE_JWT_SECRET: test
+          OPENROUTER_API_KEY: test
+          GROQ_API_KEY: test
+        run: |
+          uvicorn app.main:app --port 8000 &
+          SERVER_PID=$!
+          sleep 3
+          curl -sf http://127.0.0.1:8000/health
+          kill $SERVER_PID
+
+  frontend-build:
+    name: Frontend — typecheck, lint, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+          NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+        run: npm run build
