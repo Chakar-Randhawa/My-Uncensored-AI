@@ -30,11 +30,17 @@ class SupabaseLogger:
     def __init__(self, settings: Settings) -> None:
         self._base_url = str(settings.supabase_url).rstrip("/")
         self._headers = {
-            "apikey": settings.supabase_service_role_key,
-            "Authorization": f"Bearer {settings.supabase_service_role_key}",
+            # `apikey` only — deliberately NOT also sent as
+            # `Authorization: Bearer`. Supabase's current secret keys
+            # (`sb_secret_...`) aren't JWTs; passing one as a bearer token
+            # gets the request rejected with "Invalid JWT" on some
+            # endpoints. `apikey` alone is sufficient to authenticate as
+            # service-role and bypass RLS for both the new secret-key
+            # format and a legacy `service_role` JWT.
+            "apikey": settings.supabase_secret_key,
             "Content-Type": "application/json",
-            # service_role bypasses RLS; Prefer=minimal skips echoing the
-            # inserted row back, saving a little bandwidth/latency.
+            # Prefer=minimal skips echoing the inserted row back, saving a
+            # little bandwidth/latency.
             "Prefer": "return=minimal",
         }
 

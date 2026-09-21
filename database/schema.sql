@@ -18,6 +18,7 @@
 -- =====================================================================
 
 create extension if not exists "pgcrypto";
+create extension if not exists "vector";
 
 -- ---------------------------------------------------------------------
 -- users: public metadata mirror of auth.users
@@ -197,3 +198,68 @@ create policy "messages_owner_all"
 -- Service role (used exclusively by the FastAPI backend for the
 -- async background log write) bypasses RLS automatically — no
 -- policy needed for it.
+
+-- =====================================================================
+-- Semantic response cache (pgvector)
+-- =====================================================================
+-- Only ever written/read by the backend's service_role key, keyed on a
+-- 384-dim embedding (fastembed's BAAI/bge-small-en-v1.5 — a small ONNX
+-- model, no PyTorch/GPU needed, safe to run in a free-tier container).
+-- Deliberately NOT scoped to a user — a cache hit on a generic factual
+-- question benefits every user, and nothing sensitive/personal is cached
+-- because main.py only consults the cache for single-turn (no prior
+-- conversation context) requests.
+create table if not exists public.response_cache (
+    id               uuid primary key default gen_random_uuid(),
+    query_text       text not null,
+    query_embedding  vector(384) not null,
+    response_text    text not null,
+    provider         text not null,
+    hit_count        integer not null default 0,
+    created_at       timestamptz not null default now(),
+    last_hit_at      timestamptz not null default now()
+);
+
+-- Approximate nearest-neighbor index for cosine distance (`<=>`). Lists=100
+-- is a reasonable default for a cache that stays in the thousands-of-rows
+-- range; rebuild with a higher `lists` value if this table grows large.
+create index if not exists idx_response_cache_embedding
+    on public.response_cache
+    using ivfflat (query_embedding vector_cosine_ops)
+    with (lists = 100);
+
+alter table public.response_cache enable row level security;
+-- No policies defined -> RLS default-denies all access via the anon/
+-- authenticated key. Only the service_role key (used exclusively by the
+-- FastAPI backend) can read or write this table, which is intentional:
+-- cached answers are served back through the backend, never queried
+-- directly from the browser.
+
+-- Parameter is prefixed `p_` specifically so it can't collide with the
+-- `response_cache.query_embedding` column name inside the query below —
+-- Postgres does not let you disambiguate same-named columns/params by
+-- qualifying a parameter with the function's name.
+create or replace function public.match_cached_response(
+    p_query_embedding vector(384),
+    match_threshold float,
+    match_count int default 1
+)
+returns table (
+    id uuid,
+    response_text text,
+    provider text,
+    similarity float
+)
+language sql
+stable
+as $$
+    select
+        response_cache.id,
+        response_cache.response_text,
+        response_cache.provider,
+        1 - (response_cache.query_embedding <=> p_query_embedding) as similarity
+    from public.response_cache
+    where 1 - (response_cache.query_embedding <=> p_query_embedding) > match_threshold
+    order by response_cache.query_embedding <=> p_query_embedding
+    limit match_count;
+$$;

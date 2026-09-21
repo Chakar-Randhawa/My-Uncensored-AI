@@ -59,6 +59,12 @@ class ProviderConfig:
     connect_timeout_seconds: float = 5.0
     read_timeout_seconds: float = 30.0
     extra_headers: dict[str, str] = field(default_factory=dict)
+    # Whether `model` accepts image_url content parts. Set per-request in
+    # main.py's adapter factory (a vision-capable model is swapped in when
+    # the incoming message list contains images) rather than hardcoded per
+    # provider class, since most providers offer both text-only and vision
+    # variants of the same family.
+    supports_vision: bool = False
 
 
 class BaseModelAdapter(ABC):

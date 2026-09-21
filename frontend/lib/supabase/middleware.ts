@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
 /**
@@ -11,13 +11,13 @@ export async function updateSession(request: NextRequest) {
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
       cookies: {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           for (const { name, value } of cookiesToSet) {
             request.cookies.set(name, value);
           }
@@ -37,7 +37,8 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isAuthRoute = request.nextUrl.pathname.startsWith("/auth");
-  const isProtectedRoute = request.nextUrl.pathname.startsWith("/chat");
+  const isProtectedRoute =
+    request.nextUrl.pathname.startsWith("/chat") || request.nextUrl.pathname.startsWith("/admin");
 
   if (!user && isProtectedRoute) {
     const redirectUrl = new URL("/auth/sign-in", request.url);

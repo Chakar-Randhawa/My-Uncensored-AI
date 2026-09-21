@@ -24,6 +24,24 @@ class ChatRole(str, Enum):
 class ChatMessage(BaseModel):
     role: ChatRole
     content: str = Field(min_length=1, max_length=32_000)
+    # Data URLs (`data:image/png;base64,...`) or plain https image URLs.
+    # Only meaningful on `role="user"` messages and only forwarded to
+    # providers/models that actually support vision input — see
+    # `BaseModelAdapter.supports_vision` and each adapter's payload
+    # builder for how a non-vision provider degrades (images silently
+    # dropped rather than the request failing outright).
+    images: list[str] = Field(default_factory=list, max_length=8)
+
+    @field_validator("images")
+    @classmethod
+    def _validate_image_refs(cls, value: list[str]) -> list[str]:
+        for ref in value:
+            if not (ref.startswith("data:image/") or ref.startswith("https://")):
+                raise ValueError(
+                    "images must be data:image/... URLs or https:// URLs, "
+                    f"got: {ref[:40]!r}"
+                )
+        return value
 
 
 class ChatCompletionRequest(BaseModel):
@@ -40,8 +58,14 @@ class ChatCompletionRequest(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=2048, ge=1, le=8192)
     # Explicit provider order override. Falls back to the engine default
-    # (config-driven) when omitted.
+    # (config-driven) when omitted. A single-element list effectively
+    # disables racing and pins the request to one provider (the frontend's
+    # provider-selector uses this).
     provider_priority: list[str] | None = None
+    # Set false to bypass the semantic cache for this request (e.g. the
+    # frontend's explicit "Regenerate" action, which should never return a
+    # stale cached answer).
+    use_cache: bool = True
 
     @field_validator("messages")
     @classmethod
