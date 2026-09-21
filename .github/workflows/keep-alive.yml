@@ -1,0 +1,26 @@
+name: Keep backend alive
+
+# Render's free tier spins a web service down after ~15 minutes of no
+# traffic, and the next request pays a 30-60s cold start. This workflow
+# pings /health often enough that real users rarely hit a cold start.
+# GitHub Actions' own scheduler adds its own jitter (a few minutes of
+# delay past the exact cron time is normal and fine here), and a public
+# repo's scheduled workflows can be auto-disabled after 60 days of
+# repository inactivity — push something occasionally, or re-enable it
+# manually from the Actions tab if that happens.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health endpoint
+        run: |
+          if [ -z "${{ secrets.BACKEND_HEALTH_URL }}" ]; then
+            echo "BACKEND_HEALTH_URL secret not set — add it in repo Settings > Secrets and variables > Actions (e.g. https://your-service.onrender.com/health)."
+            exit 1
+          fi
+          curl -sf --max-time 20 "${{ secrets.BACKEND_HEALTH_URL }}" || echo "Ping failed — backend may be cold-starting or down."
